@@ -1,0 +1,15 @@
+.DS_Store
+.tmp
+*.js
+tslint.json
+tsconfig.json
+yarn.lock
+node_modules
+lib/ffmpeg-mac
+admin.env
+.env
+.serverless/*
+.jsbeautifyrc
+.npmignore
+npm-debug.log
+events/*

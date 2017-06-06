@@ -1,0 +1,28 @@
+{
+  "name": "zip-aws-lambda",
+  "version": "1.0.0",
+  "description": "AWS Lambda to zip ressources as stream between S3 buckets",
+  "main": "handler.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Yoann Gendrey",
+  "license": "MIT",
+  "dependencies": {
+    "archiver": "^1.3.0",
+    "async": "^2.4.1",
+    "aws-sdk": "^2.63.0",
+    "bluebird": "^3.5.0",
+    "dotenv": "^4.0.0",
+    "fs": "^0.0.1-security",
+    "global": "^4.3.2",
+    "lodash": "^4.17.4",
+    "mime": "^1.3.6",
+    "moment": "^2.18.1",
+    "pump": "^1.0.2",
+    "s3-upload-stream": "^1.0.7",
+    "serverless": "1.14",
+    "serverless-plugin-write-env-vars": "^1.0.1",
+    "uuid": "^3.0.1"
+  }
+}
