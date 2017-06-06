@@ -12,4 +12,3 @@ admin.env
 .jsbeautifyrc
 .npmignore
 npm-debug.log
-events/*
