@@ -1,97 +1,98 @@
-'use strict'
-
-declare const module: any
-declare const require: any
-declare const process: any
-
 import { config } from './config'
 import * as utils from './utils/utils'
-import { File } from './items/File'
+import { file } from './utils/File'
 
-import {
- promise,
- aws,
- archiver,
- moment,
- pump,
- async,
- s3s,
- _,
- uuid
-} from './utils/node_modules'
+import * as aws from 'aws-sdk'
+import * as _ from 'lodash'
+import * as archiver from 'archiver'
+import * as pump from 'pump'
+import * as async from 'async'
+import * as s3s from 's3-upload-stream'
+import * as uuidv4 from 'uuid/v4'
+import * as chalk from 'chalk'
 
 export const zipRessource: any = (data: any) => {
- return new promise((resolve: any, reject: any) => {
-  const zip: any = (zipContent: any, cbz: any) => {
-   let isFinishedCounter: number = 0
-   const s3: any = new aws.S3()
-   zipContent = (Array.isArray(zipContent)) ? zipContent : [zipContent]
-   const fileName: string = _.head(zipContent).name
-   const archive: any = archiver('zip', { store: true })
-    .on('error', (err: any) => {
-     cbz(err)
+  return new Promise((resolve: any, reject: any) => {
+    const s3: any = new aws.S3()
+    const archive = archiver('zip', { store: true }).on('error', (err: any) => { reject(err) })
+    archive.setMaxListeners(0)
+
+    const output = data.outputZip
+    const uploadStream = s3s(new aws.S3()).upload(output.s3.get())
+
+    uploadStream.maxPartSize(config.maxPartSize)
+    uploadStream.concurrentParts(config.concurrentParts)
+
+    uploadStream
+      .on('uploaded', (details) => resolve(data))
+
+    pump(archive, uploadStream, (err: any) => {
+      if (err) {
+        reject(err)
+      }
     })
-   const outputFilename: string = (!_.isEmpty(data.event.outputFilename)) ? data.event.outputFilename : uuid.v4()
-   const output: any = File(utils.getName(outputFilename, '', config.extensions.zipOutput), config.tempPath, data.event.buckets.output)
-   const outputStream: any = s3s(new aws.S3()).upload({
-    'Bucket': data.event.buckets.output,
-    'Key': output.name,
-   }).on('finish', () => {
-    if (isFinishedCounter++ === 1) {
-     cbz(null, {
-      content: zipContent,
-      zipped: File(utils.getName(_.head(output.name.split('.')), '', config.extensions.zipOutput), config.tempPath, data.event.buckets.output)
-     })
-    }
-   })
 
-   pump(archive, outputStream, (err: any) => {
-    if (err) {
-     cbz(err)
-    }
-   })
-
-   async.each(data.items, (zipItem, cb) => {
-    archive.append(s3.getObject(zipItem.s3Params().get).createReadStream(), { name: zipItem.name })
-    cb()
-   }, () => {
-    archive.finalize()
-   })
-  }
-  utils.log('Zip in progress...')
-  //map of items of multiple zip ressources (providing multiple zipContents)
-  async.map([data.items], zip, (err: any, zips: any) => {
-   if (err) {
-    reject(err)
-   } else {
-    utils.log('Zip ended and streamed to', data.event.buckets.output)
-    utils.log('Streamed zips output', zips)
-    data.zips = zips
-    resolve(data)
-   }
+    async.eachSeries(data.zipFiles, (zipFile, cb) => {
+      let once = false;
+      const parameters: any = zipFile.s3.get()
+      s3.headObject(parameters, (err: any, data: any) => {
+        if (err) {
+          cb(err)
+        } else {
+          archive.append(s3.getObject(parameters).createReadStream(), { name: zipFile.name })
+            .on('progress', (details) => {
+              if (details.entries.total === details.entries.processed && once === false) {
+                once = true
+                cb()
+              }
+            })
+        }
+      })
+    }, (err) => {
+      if (err) {
+        reject(err)
+      }
+      archive.finalize()
+    })
   })
- })
 }
 
 export const parseRessource = (data: any) => {
- return new promise((resolve: any, reject: any) => {
-  if (data.hasOwnProperty('event')) {
-   if (!_.isEmpty(data.event.buckets.input) && !_.isEmpty(data.event.buckets.output) && !_.isEmpty(data.event.zipContent)) {
-    data['items'] = data.event.zipContent.map((zipItem) => {
-     let item: any = {
-      Bucket: data.event.buckets.input,
-      Key: zipItem
-     }
-     const keyPart: any = item.Key.split('.')
-     return File(utils.getName(_.head(keyPart), '', _.last(keyPart)), config.tempPath, item.Bucket)
-    })
-    utils.log('Ressources parsed, going to zip this', data.items)
-    resolve(data)
-   } else {
-    reject({ err: 'Required parameters not found, expected (buckets.input/buckets.output/zipContent/outputFilename(optional))', provided: data.event })
-   }
-  } else {
-   reject({ err: 'Event is not provided' })
-  }
- })
+  return new Promise((resolve: any, reject: any) => {
+    if (data.hasOwnProperty('event')) {
+      const event = data.event
+      if (!_.isEmpty(event.buckets.source) && !_.isEmpty(event.buckets.destination) && !_.isEmpty(event.Keys)) {
+        event.outputFilename = !_.isEmpty(event.outputFilename) ? event.outputFilename : uuidv4()
+        data.outputZip = file({ path: config.tempPath + '/' + event.outputFilename + '.' + config.extensions.zipOutput, bucket: event.buckets.destination })
+        data['zipFiles'] = event.Keys.map((key) => {
+          let item: any = {
+            Bucket: event.buckets.source,
+            Key: key
+          }
+          return file({ path: config.tempPath + '/' + item.Key, bucket: item.Bucket })
+        })
+        utils.log('Your bucket source (files)', chalk.red(event.buckets.source))
+        utils.log('Content of your zip', data.zipFiles.map(file => file.name))
+        utils.log('Your bucket destination (zip)', chalk.red(event.buckets.destination))
+        utils.log('Your zip filename', chalk.red(event.outputFilename))
+        resolve(data)
+      } else {
+        reject({
+          err: {
+            required: {
+              "buckets": {
+                "source": "",
+                "destination": ""
+              },
+              "Keys": [],
+              "outputFilename": "(optional)"
+            }
+          },
+          provided: data.event
+        })
+      }
+    } else {
+      reject({ err: 'Event is not provided' })
+    }
+  })
 }

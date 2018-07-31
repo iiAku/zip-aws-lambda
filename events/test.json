@@ -1,8 +1,11 @@
 {
   "buckets": {
-    "input": "",
-    "output": ""
+    "source": "images",
+    "destination": "images-zips"
   },
-  "outputFilename": "",
-  "zipContent": []
+  "Keys": [
+    "002080db-c1c8-4d13-bea9-395162c0ab1e.png",
+    "002080db-c1c8-4d13-bea9-395162c0ab1e.png"
+  ],
+  "outputFilename": "zip-of-2images"
 }
