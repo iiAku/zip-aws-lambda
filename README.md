@@ -27,7 +27,7 @@ bucket.destination **[string]**: Bucket name where you want to upload your zippe
 Keys **string[]**: Array of filename (string) of each file you need to include into your zip file
 
 **optional**
-outputFilename **[string]**
+outputFilename **[string]** if not provided you'll get an uuid as filename
 
 ### Run lambda locally
 `serverless invoke local -f zip -p YOUR_EVENT.json`
